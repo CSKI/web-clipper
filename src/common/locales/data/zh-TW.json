@@ -88,6 +88,7 @@
   "backend.services.youdao.unauthorizedErrorMessage": "授權失敗，請登錄網頁版有道雲筆記。",
   "backend.services.yuque_oauth.name": "語雀(一鍵授權)",
   "backend.services.yuque.form.repositoryType": "知識庫類型",
+  "backend.services.yuque.form.path": "save path",
   "backend.services.yuque.form.showAllRepository": "顯示全部知識庫",
   "backend.services.yuque.form.showGroupRepository": "顯示團隊的知識庫",
   "backend.services.yuque.form.showSelfRepository": "顯示自己的知識庫",

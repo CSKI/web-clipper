@@ -52,4 +52,11 @@ export interface YuqueCompleteStatus extends CompleteStatus {
 
 export interface YuqueCreateDocumentRequest extends CreateDocumentRequest {
   slug?: string;
+  path?: string;
+}
+
+export interface YuqueToc {
+  value: string;
+  title: string;
+  children: YuqueToc[];
 }

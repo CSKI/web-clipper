@@ -26,6 +26,7 @@ import { IContentScriptService } from '@/service/common/contentScript';
 import { IExtensionService, IExtensionContainer } from '@/service/common/extension';
 import { IExtensionWithId, InitContext } from '@/extensions/common';
 import usePowerpack from '@/common/hooks/usePowerpack';
+import eventBus from 'common/event';
 
 const mapStateToProps = ({
   clipper: {
@@ -194,7 +195,11 @@ const Page = React.memo<PageProps>(
         </div>
       </Dropdown>
     );
-
+    // @ts-ignore
+    eventBus.addListener('repository', (repositoryId: String) => {
+      // @ts-ignore
+      dispatch(selectRepository({ repositoryId }));
+    });
     return (
       <ToolContainer onClickCloseButton={Container.get(IContentScriptService).hide}>
         {header}

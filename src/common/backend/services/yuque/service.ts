@@ -15,6 +15,7 @@ import {
   YuqueRepository,
   YuqueCompleteStatus,
   YuqueCreateDocumentRequest,
+  YuqueToc,
 } from './interface';
 
 const HOST = 'https://www.yuque.com';
@@ -25,11 +26,24 @@ export default class YuqueDocumentService implements DocumentService {
   private userInfo?: YuqueUserInfoResponse;
   private config: YuqueBackendServiceConfig;
   private repositories: YuqueRepository[];
+  private requestFull: RequestHelper;
+  // eslint-disable-next-line @typescript-eslint/member-ordering
+  public tocs: YuqueToc[] | undefined;
 
   constructor({ accessToken, repositoryType = RepositoryType.all }: YuqueBackendServiceConfig) {
     this.config = { accessToken, repositoryType };
     this.request = new RequestHelper({
       baseURL: BASE_URL,
+      headers: {
+        'X-Auth-Token': accessToken,
+      },
+      request: Container.get(IBasicRequestService),
+      interceptors: {
+        response: e => (e as any).data,
+      },
+    });
+    //全路径api
+    this.requestFull = new RequestHelper({
       headers: {
         'X-Auth-Token': accessToken,
       },
@@ -75,6 +89,15 @@ export default class YuqueDocumentService implements DocumentService {
       }
     }
     this.repositories = response;
+    if (!this.tocs) {
+      this.tocs = [];
+      // eslint-disable-next-line guard-for-in
+      for (let x in response) {
+        let item = response[x];
+        this.tocs.push(await this.getYuqueTocInfo(item.id, item.name));
+      }
+    }
+
     return response.map(({ namespace, ...rest }) => ({ ...rest }));
   };
 
@@ -82,7 +105,8 @@ export default class YuqueDocumentService implements DocumentService {
     if (!this.userInfo) {
       this.userInfo = await this.getYuqueUserInfo();
     }
-    const { content: body, title, repositoryId } = info;
+    const { content: body, title, repositoryId, path } = info;
+    let [parentUid] = (path ? path : '|').split('|');
     const repository = this.repositories.find(o => o.id === repositoryId);
     if (!repository) {
       throw new Error('illegal repositoryId');
@@ -100,6 +124,9 @@ export default class YuqueDocumentService implements DocumentService {
       }
     );
     const data = response;
+    //移动文档
+    await this.moveDoc(repositoryId, parentUid, [data.id]);
+
     return {
       href: `${HOST}/${repository.namespace}/${data.slug}`,
       repositoryId,
@@ -108,6 +135,74 @@ export default class YuqueDocumentService implements DocumentService {
     };
   };
 
+  getYuqueTocInfo = async (bookId: string, rootPath: string) => {
+    const response = await this.requestFull.get(`${HOST}/api/books/${bookId}/toc`);
+    // @ts-ignore
+    let maps: { [k: string]: YuqueToc } = {};
+    let depth: { [k: string]: string[] } = {};
+    maps[bookId] = {
+      title: rootPath,
+      value: `|${bookId}`,
+      children: [],
+    };
+    // @ts-ignore
+    // eslint-disable-next-line guard-for-in
+    for (let index in response.toc) {
+      // @ts-ignore
+      let toc = response.toc[index];
+      if (toc.type !== 'TITLE') {
+        continue;
+      }
+
+      let uuid: string = `${toc.uuid}`;
+      let parentId: string = toc.parent_uuid ? toc.parent_uuid : bookId;
+      maps[uuid] = {
+        value: `${uuid}|${bookId}`,
+        title: toc.title,
+        children: [],
+      };
+
+      if (typeof depth[parentId] === 'undefined') {
+        depth[parentId] = [uuid];
+      } else {
+        depth[parentId].push(uuid);
+      }
+    }
+    //无限极分类代码
+    let arr = [bookId];
+    while (arr.length > 0) {
+      let parentId: string = String(arr.shift());
+      let parent = maps[parentId];
+      let childs = depth[parentId];
+      // eslint-disable-next-line no-undefined
+      if (parent === undefined || childs === undefined) {
+        continue;
+      }
+      for (let i = 0; i < childs.length; i++) {
+        let toc = maps[childs[i]];
+        let uuid = String(toc.title.split('|')[0]);
+        // toc['title'] = `${parent['title']}/${toc['title']}`
+        maps[parentId].children.push(toc);
+        if (typeof depth[uuid] !== 'undefined') {
+          arr.push(uuid);
+        }
+      }
+    }
+
+    return maps[bookId];
+  };
+
+  private moveDoc = async (bookId: String, targetId: String, uuids: Number[]) => {
+    console.log(bookId, targetId, uuids);
+    const query = {
+      action: 'appendByDocs',
+      doc_ids: uuids,
+      target_uuid: targetId,
+    };
+    let url = `repos/${bookId}/toc`;
+
+    return this.request.put(url, { data: query });
+  };
   private getUserGroups = async () => {
     if (!this.userInfo) {
       this.userInfo = await this.getYuqueUserInfo();
